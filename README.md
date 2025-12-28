@@ -26,46 +26,24 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
    ```
 
 2. **Install dependencies using uv:**
-   ```bash
-   uv pip install -e .
-   ```
-
-   Or if you want to use a virtual environment:
-   ```bash
-   uv venv
-   uv pip install -e .
-   ```
+  ```bash
+  uv sync
+  ```
 
 3. **Configure VSCode to use this MCP server:**
 
-   Create or edit your VSCode settings file (`.vscode/settings.json` in your workspace or user settings):
+   Use the provided `.vscode/mcp.json` (already set up to run from project root with uv):
 
-   ```json
+   ```jsonc
    {
-     "github.copilot.chat.mcp.servers": {
+     "servers": {
        "copilot-followup": {
-         "command": "python",
+         "command": "uv",
          "args": [
-           "-m",
-           "copilot_followup_mcp.server"
+           "run",
+           "server.py"
          ],
-         "cwd": "C:\\Users\\smitk\\Desktop\\copilot followup\\src"
-       }
-     }
-   }
-   ```
-
-   Or use the full path to your Python executable:
-   ```json
-   {
-     "github.copilot.chat.mcp.servers": {
-       "copilot-followup": {
-         "command": "C:\\path\\to\\python.exe",
-         "args": [
-           "-m",
-           "copilot_followup_mcp.server"
-         ],
-         "cwd": "C:\\Users\\smitk\\Desktop\\copilot followup\\src"
+         "cwd": "C:\\Users\\smitk\\Desktop\\copilot followup"
        }
      }
    }
@@ -119,8 +97,8 @@ I've created a basic web scraper. What would you like to do next?
 
 - **↑/↓ Arrow Keys** - Navigate through options
 - **Enter** - Select the highlighted option (or submit custom message if in text box)
-- **Shift+Enter** - Copy the selected option to the text box for editing
-- **Tab** - Switch between option list and custom text box
+- **F2** - Copy the selected option to the text box for editing
+- **Tab** - Switch between option list and custom text box (pre-fills with selected option)
 - **Ctrl+C** - Cancel the prompt
 
 ### Tool Description

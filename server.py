@@ -87,14 +87,14 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
             options = ["Continue", "Make changes", "Finish"]
 
         # Launch terminal
-        success = launch_terminal_prompt(
+        terminal_process = launch_terminal_prompt(
             question=question,
             options=options,
             output_file=output_file,
             title="Follow-up Question",
         )
 
-        if not success:
+        if not terminal_process:
             return json.dumps(
                 {
                     "error": "Failed to launch terminal. Please ensure you have terminal access.",
@@ -102,18 +102,53 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
                 }
             )
 
-        # Wait for user response (with timeout)
-        timeout = 300  # 5 minutes
+        # Detect if the launcher process is known to exit quickly (e.g., wt.exe)
+        short_lived_launcher = False
+        try:
+            argv0 = "" if terminal_process.args is None else str(terminal_process.args[0]).lower()
+            if "wt.exe" in argv0:
+                short_lived_launcher = True
+        except Exception:
+            short_lived_launcher = False
+
+        # Wait for user response with cautious process monitoring
+        timeout = 120  # 2 minutes max timeout
         start_time = time.time()
+        check_interval = 0.5  # Check every 0.5 seconds
 
         while not output_file.exists() and time.time() - start_time < timeout:
-            time.sleep(0.5)
+            # Only treat the process exiting as a failure when it's not a short-lived launcher
+            if not short_lived_launcher and terminal_process.poll() is not None:
+                # Process has ended, wait a bit for the file to be written
+                time.sleep(2)
+                if output_file.exists():
+                    break
+
+                # Process truly ended without producing a response
+                if time.time() - start_time > 5:
+                    return json.dumps(
+                        {
+                            "error": "Terminal closed without response",
+                            "message": "The terminal window was closed before a response was provided. You can skip this follow-up question and continue with the task, or ask again if needed.",
+                            "suggestion": "Skip this follow-up and proceed with the current task.",
+                        }
+                    )
+
+            time.sleep(check_interval)
 
         if not output_file.exists():
+            # Timeout reached
+            # Try to terminate the process gracefully
+            try:
+                terminal_process.terminate()
+            except Exception:
+                pass
+                
             return json.dumps(
                 {
-                    "error": "Timeout waiting for user response",
-                    "message": "No response received within 5 minutes. Please try again.",
+                    "error": "User did not respond",
+                    "message": "No response was received within 2 minutes. The user may have closed the terminal window or not responded. You can either skip this question and continue, or ask the question again if needed.",
+                    "suggestion": "Skip this follow-up and continue with the task, or rephrase and retry the question.",
                 }
             )
 
@@ -134,7 +169,7 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
                 return json.dumps(
                     {
                         "status": "cancelled",
-                        "message": "User cancelled the follow-up question",
+                        "message": "User cancelled the follow-up question by closing the terminal or not selecting an option. You can skip this follow-up and continue with the task.",
                     }
                 )
 

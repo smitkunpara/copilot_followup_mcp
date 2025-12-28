@@ -17,8 +17,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/copilot_followup_mcp"]
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = []
 
 [project.scripts]
 copilot-followup-mcp = "copilot_followup_mcp.server:main"

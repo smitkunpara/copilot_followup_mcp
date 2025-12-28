@@ -11,6 +11,7 @@ from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import FormattedTextControl, HSplit, Layout, VSplit, Window
 from prompt_toolkit.layout.containers import ConditionalContainer, Container
+from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea
 
 
@@ -125,14 +126,17 @@ class InteractiveFollowUpCLI:
         # Display hints
         content.append(("", "\n"))
         content.append(("class:hint", "💡 Hints:\n"))
-        content.append(("class:hint", "  ↑/↓    : Navigate options\n"))
+        content.append(("class:hint", "  ↑/↓         : Navigate options\n"))
         content.append(
-            ("class:hint", "  Enter  : Select option or submit custom message\n")
+            ("class:hint", "  Enter       : Select option or submit custom message\n")
         )
         content.append(
-            ("class:hint", "  Tab    : Switch between options and text box\n")
+            ("class:hint", "  Tab         : Switch to text input (pre-fill selected)\n")
         )
-        content.append(("class:hint", "  Ctrl+C : Cancel\n"))
+        content.append(
+            ("class:hint", "  F2          : Edit selected option\n")
+        )
+        content.append(("class:hint", "  Ctrl+C      : Cancel\n"))
 
         return FormattedText(content)
 
@@ -180,13 +184,27 @@ class InteractiveFollowUpCLI:
 
         @kb.add("tab")
         def _tab(event):
-            """Switch between options and text box."""
-            self.focus_on_textbox = not self.focus_on_textbox
-            if self.focus_on_textbox:
+            """Switch to text input and pre-fill with selected option."""
+            if not self.focus_on_textbox:
+                if self.options and 0 <= self.selected_index < len(self.options):
+                    # Pre-fill with selected option
+                    self.text_area.text = self.options[self.selected_index]
+                self.focus_on_textbox = True
                 event.app.layout.focus(self.text_area)
             else:
-                # Clear focus from text area
+                # If already in text mode, switch back to options
+                self.focus_on_textbox = False
                 event.app.layout.focus_previous()
+
+        @kb.add("f2")
+        def _edit_option(event):
+            """Edit the selected option (F2)."""
+            if not self.focus_on_textbox and self.options:
+                if 0 <= self.selected_index < len(self.options):
+                    # Pre-fill with selected option for editing
+                    self.text_area.text = self.options[self.selected_index]
+                    self.focus_on_textbox = True
+                    event.app.layout.focus(self.text_area)
 
         @kb.add("enter")
         def _enter(event):
@@ -201,15 +219,6 @@ class InteractiveFollowUpCLI:
                 if self.options and 0 <= self.selected_index < len(self.options):
                     self.result = self.options[self.selected_index]
                     event.app.exit()
-
-        @kb.add("s-enter")  # Shift+Enter
-        def _shift_enter(event):
-            """Move selected option to text box for editing."""
-            if not self.focus_on_textbox and self.options:
-                if 0 <= self.selected_index < len(self.options):
-                    self.text_area.text = self.options[self.selected_index]
-                    self.focus_on_textbox = True
-                    event.app.layout.focus(self.text_area)
 
         @kb.add("c-c")
         def _cancel(event):
@@ -227,14 +236,14 @@ class InteractiveFollowUpCLI:
             key_bindings=self._create_key_bindings(),
             full_screen=False,
             mouse_support=False,
-            style={
+            style=Style.from_dict({
                 "question": "bold #00aaff",
                 "option": "#ffffff",
                 "selected": "bold #00ff00",
                 "textbox": "#888888",
                 "textbox-selected": "bold #00ff00",
                 "hint": "#888888 italic",
-            },
+            }),
         )
 
         try:

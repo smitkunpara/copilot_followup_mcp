@@ -70,7 +70,7 @@ def create_terminal_script(python_code: str) -> Path:
     return Path(temp_path)
 
 
-def open_vscode_terminal(script_path: Path, title: str = "Follow-up Question") -> bool:
+def open_vscode_terminal(script_path: Path, title: str = "Follow-up Question") -> Optional[subprocess.Popen]:
     """
     Open a new terminal in VSCode and run the script.
 
@@ -79,32 +79,37 @@ def open_vscode_terminal(script_path: Path, title: str = "Follow-up Question") -
         title: Title for the terminal
 
     Returns:
-        True if successful, False otherwise
+        Process handle if successful, None otherwise
     """
-    vscode_cmd = get_vscode_executable()
-    if not vscode_cmd:
-        return False
-
     try:
-        # Create a command that will run in the new terminal
+        # When running inside VSCode, use Windows Terminal or PowerShell
+        # VSCode's integrated terminal API is not directly accessible from MCP server
+        # So we fall back to OS terminal which the user will see
         python_exe = sys.executable
-        command = f'"{python_exe}" "{script_path}"'
-
-        # Try to open terminal using VSCode CLI
-        # Note: This may not work in all VSCode versions/configurations
-        subprocess.Popen(
-            [vscode_cmd, "--new-window", "--wait"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-
-        return True
+        system = platform.system()
+        
+        if system == "Windows":
+            # Use PowerShell directly when in VSCode
+            # Don't use pause - NoExit keeps window open
+            ps_command = f"& '{python_exe}' '{script_path}'"
+            proc = subprocess.Popen(
+                [
+                    "powershell.exe",
+                    "-NoExit",
+                    "-Command",
+                    ps_command,
+                ],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+            return proc
+        
+        return None
     except Exception as e:
         print(f"Failed to open VSCode terminal: {e}", file=sys.stderr)
-        return False
+        return None
 
 
-def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> bool:
+def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> Optional[subprocess.Popen]:
     """
     Open a new terminal in the OS and run the script.
 
@@ -113,7 +118,7 @@ def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> bo
         title: Title for the terminal
 
     Returns:
-        True if successful, False otherwise
+        Process handle if successful, None otherwise
     """
     system = platform.system()
     python_exe = sys.executable
@@ -124,9 +129,9 @@ def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> bo
 
             # Try Windows Terminal
             try:
-                # Use proper escaping for PowerShell
-                ps_command = f"& '{python_exe}' '{script_path}'; Write-Host '`nPress any key to close...'; $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
-                subprocess.Popen(
+                # Don't use pause - NoExit keeps window open
+                ps_command = f"& '{python_exe}' '{script_path}'"
+                proc = subprocess.Popen(
                     [
                         "wt.exe",
                         "new-tab",
@@ -139,15 +144,15 @@ def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> bo
                     ],
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                 )
-                return True
+                return proc
             except (FileNotFoundError, OSError):
                 pass
 
             # Try PowerShell
             try:
-                # Use proper escaping for PowerShell
-                ps_command = f"& '{python_exe}' '{script_path}'; Write-Host '`nPress any key to close...'; $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
-                subprocess.Popen(
+                # Don't use pause - NoExit keeps window open
+                ps_command = f"& '{python_exe}' '{script_path}'"
+                proc = subprocess.Popen(
                     [
                         "powershell.exe",
                         "-NoExit",
@@ -156,14 +161,14 @@ def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> bo
                     ],
                     creationflags=subprocess.CREATE_NEW_CONSOLE,
                 )
-                return True
+                return proc
             except (FileNotFoundError, OSError):
                 pass
 
             # Fallback to cmd
             # For cmd, we need to wrap the entire command in quotes and escape internal quotes
             cmd_command = f'""{python_exe}" "{script_path}" && pause"'
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [
                     "cmd.exe",
                     "/K",
@@ -171,7 +176,7 @@ def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> bo
                 ],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
-            return True
+            return proc
 
         elif system == "Darwin":  # macOS
             # Use AppleScript to open Terminal.app or iTerm2
@@ -181,12 +186,12 @@ tell application "Terminal"
     do script "cd '{script_path.parent}' && '{python_exe}' '{script_path}' && echo '\\nPress any key to close...' && read -n 1"
 end tell
 """
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 ["osascript", "-e", script_content],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            return True
+            return proc
 
         else:  # Linux and other Unix-like systems
             # Try various terminal emulators
@@ -224,18 +229,18 @@ end tell
 
             for terminal_cmd in terminals:
                 try:
-                    subprocess.Popen(
+                    proc = subprocess.Popen(
                         terminal_cmd,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
-                    return True
+                    return proc
                 except (FileNotFoundError, OSError):
                     continue
 
             # If no terminal emulator found, fall back to x-terminal-emulator
             try:
-                subprocess.Popen(
+                proc = subprocess.Popen(
                     [
                         "x-terminal-emulator",
                         "-e",
@@ -244,15 +249,15 @@ end tell
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                return True
+                return proc
             except (FileNotFoundError, OSError):
                 pass
 
-        return False
+        return None
 
     except Exception as e:
         print(f"Failed to open OS terminal: {e}", file=sys.stderr)
-        return False
+        return None
 
 
 def launch_terminal_prompt(
@@ -260,7 +265,7 @@ def launch_terminal_prompt(
     options: list[str],
     output_file: Path,
     title: str = "Follow-up Question",
-) -> bool:
+) -> Optional[subprocess.Popen]:
     """
     Launch a terminal (VSCode or OS) to display the interactive prompt.
 
@@ -271,7 +276,7 @@ def launch_terminal_prompt(
         title: Title for the terminal
 
     Returns:
-        True if terminal launched successfully, False otherwise
+        Process handle if terminal launched successfully, None otherwise
     """
     # Create Python script that will run in the new terminal
     # Get the src directory path to add to Python path
@@ -303,10 +308,11 @@ with open(output_file, 'w', encoding='utf-8') as f:
     script_path = create_terminal_script(python_code)
 
     try:
-        # Try VSCode terminal first
+        # Try VSCode terminal first (when running inside VSCode)
         if is_vscode_terminal():
-            if open_vscode_terminal(script_path, title):
-                return True
+            proc = open_vscode_terminal(script_path, title)
+            if proc:
+                return proc
 
         # Fallback to OS terminal
         return open_os_terminal(script_path, title)
@@ -318,7 +324,7 @@ with open(output_file, 'w', encoding='utf-8') as f:
             script_path.unlink()
         except Exception:
             pass
-        return False
+        return None
 
 
 if __name__ == "__main__":
