@@ -10,10 +10,11 @@ from prompt_toolkit.filters import Condition
 from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import FormattedTextControl, HSplit, Layout, VSplit, Window
-from prompt_toolkit.layout.containers import ConditionalContainer, Container
+from prompt_toolkit.layout.containers import ConditionalContainer, Container, DynamicContainer
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import TextArea, Frame
+from prompt_toolkit.cursor_shapes import CursorShape
 
 
 class InteractiveFollowUpCLI:
@@ -33,13 +34,15 @@ class InteractiveFollowUpCLI:
         self.focus_on_textbox = False
         self.highlight_options = True  # Start highlighted; disable once user types
         self.result: Optional[str] = None
+        self.submitted = False
+        self.submission_type: Optional[str] = None  # 'option' or 'custom'
         self.text_area = TextArea(
-            prompt="> ",
+            prompt="",
             multiline=True,
             wrap_lines=True,
-            scrollbar=True,  # Enable scrollbar for overflow
+            scrollbar=False,
             focusable=True,
-            height=Dimension(min=1, max=5),  # Remove preferred, let content decide
+            height=Dimension(min=1, max=20),
         )
         # If user types directly, stop highlighting options
         self.text_area.buffer.on_text_insert += self._handle_text_insert
@@ -63,6 +66,33 @@ class InteractiveFollowUpCLI:
             return shutil.get_terminal_size().columns
         except Exception:
             return 80  # Default fallback
+
+    def _create_success_box(self, text: str) -> List[Tuple[str, str]]:
+        """Create a success box with the selected/submitted text."""
+        terminal_width = self._get_terminal_width()
+        box_width = min(terminal_width - 4, max(len(text) + 6, 40))
+        inner_width = box_width - 4
+        
+        lines = []
+        for line in text.split('\n'):
+            while len(line) > inner_width:
+                lines.append(line[:inner_width])
+                line = line[inner_width:]
+            lines.append(line)
+        
+        result = []
+        result.append(("class:success-box", "\n"))
+        result.append(("class:success-box", "  ╭" + "─" * (box_width - 2) + "╮\n"))
+        result.append(("class:success-box", "  │" + " ✓ Selected ".center(box_width - 2) + "│\n"))
+        result.append(("class:success-box", "  ├" + "─" * (box_width - 2) + "┤\n"))
+        
+        for line in lines:
+            padded = f" {line}".ljust(box_width - 2)
+            result.append(("class:success-box", f"  │{padded}│\n"))
+        
+        result.append(("class:success-box", "  ╰" + "─" * (box_width - 2) + "╯\n"))
+        
+        return result
 
     def _create_box(self, text: str, width: int, selected: bool = False) -> List[str]:
         """Create a text box with borders."""
@@ -133,26 +163,29 @@ class InteractiveFollowUpCLI:
         content.append(("", "\n"))
 
         # Display hints
-        content.append(("", "\n"))
-        content.append(("class:hint", "💡 Hints:\n"))
-        content.append(("class:hint", "  ↑/↓         : Navigate options\n"))
-        content.append(
-            ("class:hint", "  Enter       : Select option or submit custom message\n")
-        )
-        content.append(
-            ("class:hint", "  Tab         : Toggle between options and text input\n")
-        )
-        content.append(
-            ("class:hint", "  F2          : Edit selected option\n")
-        )
-        content.append(("class:hint", "  Ctrl+C      : Cancel\n"))
+        hints = "↑↓ Navigate  •  Enter Select  •  Tab Toggle  •  F2 Edit  •  Ctrl+C Cancel"
+        content.append(("class:hint", f"  {hints}\n"))
 
+        content.append(("", "\n"))
+
+        return FormattedText(content)
+
+    def _render_submitted_content(self) -> FormattedText:
+        """Render the submitted state with green success box."""
+        content = []
+        content.append(("class:question", f"\n{self.question}\n\n"))
+        content.extend(self._create_success_box(self.result or ""))
         return FormattedText(content)
 
     def _create_layout(self) -> Layout:
         """Create the application layout."""
+        def get_content():
+            if self.submitted:
+                return self._render_submitted_content()
+            return self._render_content()
+
         content_control = FormattedTextControl(
-            text=self._render_content,
+            text=get_content,
             focusable=False,
         )
 
@@ -162,11 +195,16 @@ class InteractiveFollowUpCLI:
         )
 
         # Always render the text input inside a frame so the box stays visible and full-width
-        text_frame = Frame(
-            body=self.text_area,
-            style="class:textbox-frame",
-            height=Dimension(min=1, preferred=1, max=5),
-        )
+        def get_text_frame():
+            if self.submitted:
+                return Window(height=0)
+            style = "class:textbox-active" if self.focus_on_textbox else "class:textbox-frame"
+            return Frame(
+                body=self.text_area,
+                style=style,
+            )
+
+        text_frame = DynamicContainer(get_text_frame)
 
         root_container = HSplit(
             [
@@ -184,24 +222,30 @@ class InteractiveFollowUpCLI:
         @kb.add("up")
         def _up(event):
             """Move selection up or navigate text."""
-            if self.focus_on_textbox or self.text_area.text:
-                # Let default behavior handle cursor movement in text
+            if self.submitted:
+                return
+            if self.focus_on_textbox:
                 event.app.current_buffer.cursor_up()
             elif self.options and self.highlight_options:
                 self.selected_index = (self.selected_index - 1) % len(self.options)
+                event.app.invalidate()
 
         @kb.add("down")
         def _down(event):
             """Move selection down or navigate text."""
-            if self.focus_on_textbox or self.text_area.text:
-                # Let default behavior handle cursor movement in text
+            if self.submitted:
+                return
+            if self.focus_on_textbox:
                 event.app.current_buffer.cursor_down()
             elif self.options and self.highlight_options:
                 self.selected_index = (self.selected_index + 1) % len(self.options)
+                event.app.invalidate()
 
         @kb.add("tab")
         def _tab(event):
             """Switch focus between options and text input."""
+            if self.submitted:
+                return
             if not self.focus_on_textbox:
                 self.focus_on_textbox = True
                 self.highlight_options = False
@@ -209,7 +253,8 @@ class InteractiveFollowUpCLI:
             else:
                 self.focus_on_textbox = False
                 self.highlight_options = True
-                event.app.layout.focus_previous()
+                # Focus away from text area to hide cursor
+                event.app.layout.focus(event.app.layout.container)
 
         @kb.add("f2")
         def _edit_option(event):
@@ -224,16 +269,26 @@ class InteractiveFollowUpCLI:
 
         @kb.add("enter")
         def _enter(event):
-            """Select current option or submit custom message."""
-            if self.focus_on_textbox:
-                # Submit custom message
+            if self.submitted:
+                event.app.exit()
+                return
+                
+            if self.focus_on_textbox and self.text_area.text.strip():
                 self.result = self.text_area.text.strip()
-                if self.result:
-                    event.app.exit()
-            else:
-                # Select current option
-                if self.options and 0 <= self.selected_index < len(self.options):
+                self.submission_type = 'custom'
+                self.submitted = True
+                event.app.invalidate()
+                import time
+                time.sleep(0.3)
+                event.app.exit()
+            elif not self.focus_on_textbox and self.options:
+                if 0 <= self.selected_index < len(self.options):
                     self.result = self.options[self.selected_index]
+                    self.submission_type = 'option'
+                    self.submitted = True
+                    event.app.invalidate()
+                    import time
+                    time.sleep(0.3)
                     event.app.exit()
 
         @kb.add("c-c")
@@ -257,16 +312,20 @@ class InteractiveFollowUpCLI:
                 "option": "#abb2bf",                   # Light gray
                 "selected": "bold #98c379",            # Green
                 "arrow": "bold #e5c07b",               # Gold arrow
-                "textbox-frame": "#61afef",            # Match question
+                "textbox-frame": "#5c6370",
+                "textbox-active": "#98c379 bold",
                 "hint": "#5c6370 italic",              # Muted gray
-                "scrollbar.background": "#3e4451",
-                "scrollbar.button": "#61afef",
+                "success-box": "bold #98c379",
+                "input-label": "#5c6370",
+                "input-label-active": "bold #98c379",
+                "input-active": "bold #98c379",
             }),
         )
 
         try:
-            # Ensure initial focus allows typing; keep options highlighted until typing
-            app.layout.focus(self.text_area)
+            # Start with focus on options, not text area
+            self.focus_on_textbox = False
+            self.highlight_options = True
             # Run application
             app.run()
             return self.result

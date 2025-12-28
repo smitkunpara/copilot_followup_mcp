@@ -1,14 +1,20 @@
 # Copilot Follow-up MCP Server
 
-An MCP (Model Context Protocol) server that enables interactive follow-up questions for VSCode Copilot Chat. This solves the limitation where Copilot doesn't natively support asking follow-up questions during conversations.
+An MCP (Model Context Protocol) server that lets Copilot Chat keep asking you questions inside the same request, so you do not burn through the 300 monthly messages on student accounts.
 
-## Features
+## Why this exists
 
-- 🔄 **Interactive Follow-up Questions** - AI can ask users questions with multiple choice options
-- ⌨️ **Rich CLI Interface** - Navigate with arrow keys, edit options, or type custom responses
-- ✍️ **Typing-First UX** - Start typing immediately for custom responses without navigation
-- 🪟 **Cross-Platform** - Works on Windows, macOS, and Linux
-- 🔁 **Loop Support** - Designed to be used repeatedly until user explicitly says "finish"
+- Preserve Copilot quota: tool calls stay inside one request and do not consume new messages.
+- Keep conversations on-rails: AI must confirm next steps, completion, and clarifications through the tool.
+- Cross-platform and resilient: falls back through multiple terminal launchers so you still get the prompt.
+
+## Features at a glance
+
+- 🔄 Interactive follow-up prompts with multiple choice and free-form input
+- ⌨️ Prompt-toolkit UI: arrow navigation, edit options, or type immediately
+- 🪟 Works on Windows, macOS, and Linux with sensible fallbacks
+- 🔁 Loop-friendly: ask after each step until you explicitly say "finish"
+- 💰 No extra Copilot requests consumed while interacting
 
 ## Installation
 
@@ -19,10 +25,7 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
 
 ### Setup
 
-1. **Clone or download this project:**
-   ```bash
-   cd "C:\Users\smitk\Desktop\copilot followup"
-   ```
+1. **Clone or download this project.**
 
 2. **Install dependencies using uv:**
   ```bash
@@ -54,61 +57,19 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
 
 ### In VSCode Copilot Chat
 
-Once configured, Copilot will automatically have access to the `ask_followup_question` tool. The AI will use this tool to:
+Once configured, Copilot automatically has access to the tools. The AI will use `ask_followup_question` to:
 
 1. **Ask questions before finishing tasks** - "I've completed X, what would you like to do next?"
 2. **Get clarification during work** - "Which approach would you prefer?"
 3. **Confirm completion** - "Are you satisfied with these changes?"
 
-### Example Conversation Flow
+### Tools
 
-```
-You: "Create a Python web scraper"
+The server exposes two tools that Copilot is required to use when interacting with you:
 
-Copilot: *creates the scraper code*
+#### 1) `ask_followup_question`
 
-Copilot: *uses ask_followup_question tool*
-```
-
-At this point, a new terminal opens with an interactive interface:
-
-```
-I've created a basic web scraper. What would you like to do next?
-
-  - Add error handling
-  - Add rate limiting
-  - Support multiple pages
-> - Add data export to CSV
-  - Finish - this looks good
-
-╭───────────────────────────────────────╮
-│ >   Type your custom message          │
-╰───────────────────────────────────────╯
-
-💡 Hints:
-  ↑/↓         : Navigate options
-  Enter       : Select option or submit custom message
-  Tab         : Toggle between options and text input
-  F2          : Edit selected option
-  Ctrl+C      : Cancel
-```
-
-### Interactive Controls
-
-- **↑/↓ Arrow Keys** - Navigate through options (when options are highlighted)
-- **Enter** - Select the highlighted option or submit custom message
-- **Tab** - Toggle focus between options and text input
-- **F2** - Edit selected option (copies it to text box for modification)
-- **Ctrl+C** - Cancel the prompt
-- **Typing directly** - Start typing immediately to enter custom response (disables option highlighting)
-
-### Tool Description
-
-The MCP server provides two main tools:
-
-#### 1. `ask_followup_question`
-
-The primary tool for asking follow-up questions.
+The primary prompt loop for clarifying next steps.
 
 ```python
 ask_followup_question(
@@ -121,16 +82,16 @@ ask_followup_question(
 )
 ```
 
-**Important Usage Rules for AI:**
-- ✅ MUST use before concluding any task
-- ✅ MUST use after completing each step
-- ✅ MUST use in a loop until user says "finish"
-- ✅ CAN use during work for clarifications
-- ❌ DO NOT finish without using this tool
+**Usage rules for AI:**
+- ✅ Ask before finishing any task
+- ✅ Ask after each step to confirm direction
+- ✅ Keep asking until you say "finish"/"done"
+- ✅ Use for clarifications instead of plain questions
+- ❌ Do not conclude without calling this tool
 
-#### 2. `confirm_completion`
+#### 2) `confirm_completion`
 
-A specialized tool for confirming task completion.
+Shortcut that summarizes work and runs a final confirmation prompt before finishing.
 
 ```python
 confirm_completion(
@@ -138,125 +99,37 @@ confirm_completion(
 )
 ```
 
+## How it works
+
+1. Copilot decides to ask a follow-up and calls `ask_followup_question` with options.
+2. The server launches an interactive terminal window (VSCode terminal when available; OS fallback otherwise).
+3. You pick an option or type your own response with prompt-toolkit UI controls.
+4. The response is written to a temporary file; the server reads it and returns the raw text to Copilot.
+5. Copilot continues in the same request, keeping your Copilot quota untouched.
+
+## Behavior and defaults
+
+- Default options: if none are provided, you will see `Continue`, `Make changes`, `Finish`.
+- Timeout: set with `FOLLOWUP_TIMEOUT_MINUTES` (default 5; <1 means wait indefinitely; max 1440).
+- Terminal closing: `CLOSE_TERMINAL=true` closes the window after submission; set to `false` to keep it open.
+- CLI controls: ↑/↓ to navigate, Enter to select, Tab to toggle focus, F2 to edit an option, typing switches to free input, Ctrl+C cancels.
+- Error handling: if the terminal closes without a response or times out, the tool returns a structured JSON error that Copilot can surface.
+
 ## Architecture
 
-The MCP server consists of several components:
-
-- **`server.py`** - Main FastMCP server with tool definitions
-- **`interactive_cli.py`** - Rich terminal UI using prompt-toolkit
-- **`terminal_launcher.py`** - Cross-platform terminal launcher
-
-## How It Works
-
-1. **AI makes decision** - Copilot decides to ask a follow-up question
-2. **Tool invocation** - Calls `ask_followup_question` with question and options
-3. **Terminal launch** - Opens a new terminal (VSCode or system terminal)
-4. **User interaction** - User selects/edits/types their response
-5. **Response capture** - Result is written to a temporary file
-6. **AI receives response** - Copilot gets the user's choice and continues
+- server.py — FastMCP server and tool definitions
+- src/copilot_followup_mcp/interactive_cli.py — prompt-toolkit UI
+- src/copilot_followup_mcp/terminal_launcher.py — terminal launcher with platform fallbacks
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
-- `FOLLOWUP_TIMEOUT_MINUTES`: Timeout in minutes for waiting user response (1-1440, <1 = infinite, default 5)
-- `CLOSE_TERMINAL`: Whether to close terminal after question completion (true/false, default true)
+- `FOLLOWUP_TIMEOUT_MINUTES`: User-response timeout in minutes (1-1440, default 5; <1 waits forever).
+- `CLOSE_TERMINAL`: Close the terminal after completion (`true`/`false`, default `true`).
 
-## Terminal Fallback
+### Terminal fallback order
 
-### Windows
-1. PowerShell
-2. Command Prompt (cmd.exe)
-
-### macOS
-1. Terminal.app
-
-### Linux
-1. gnome-terminal
-2. konsole
-3. xfce4-terminal
-4. xterm
-5. terminator
-6. x-terminal-emulator
-
-## Testing
-
-### Test the Interactive CLI
-
-```bash
-cd "C:\Users\smitk\Desktop\copilot followup"
-python -m copilot_followup_mcp.interactive_cli
-```
-
-### Test the Terminal Launcher
-
-```bash
-python -m copilot_followup_mcp.terminal_launcher
-```
-
-### Test the Full MCP Server
-
-```bash
-python -m copilot_followup_mcp.server
-```
-
-## Troubleshooting
-
-### Terminal doesn't open
-
-- **Check if Python is in PATH** - Run `python --version`
-- **Check MCP client configuration** - Ensure the server is configured correctly
-
-### "Missing dependencies" error
-
-```bash
-uv pip install prompt-toolkit psutil fastmcp
-```
-
-### Response timeout
-
-- Default timeout is 5 minutes
-- If you need more time, the timeout can be adjusted in `server.py`
-
-## Development
-
-### Project Structure
-
-```
-copilot followup/
-├── src/
-│   └── copilot_followup_mcp/
-│       ├── __init__.py
-│       ├── server.py              # Main MCP server
-│       ├── interactive_cli.py     # Interactive terminal UI
-│       └── terminal_launcher.py   # Terminal launcher
-├── pyproject.toml                 # Project configuration
-└── README.md                      # This file
-```
-
-### Adding New Features
-
-1. Edit the relevant module in `src/copilot_followup_mcp/`
-2. Test your changes
-3. Restart the MCP server (restart VSCode)
-
-## Best Practices for AI Usage
-
-When using this MCP server, the AI should:
-
-1. **Always provide clear options** - Give 3-5 specific, actionable choices
-2. **Always include a "finish" option** - Let users exit the loop
-3. **Use descriptive questions** - Be specific about what you're asking
-4. **Loop until done** - Keep asking until user selects "finish" or equivalent
-5. **Handle cancellations gracefully** - User might press Ctrl+C
-
-## License
-
-MIT License - Feel free to use and modify as needed.
-
-## Credits
-
-Built with:
-- [FastMCP](https://github.com/jlowin/fastmcp) - MCP server framework
-- [prompt-toolkit](https://github.com/prompt-toolkit/python-prompt-toolkit) - Interactive CLI
-- [uv](https://github.com/astral-sh/uv) - Fast Python package manager
+- Windows: PowerShell, then Command Prompt
+- macOS: Terminal.app (via AppleScript)
+- Linux: gnome-terminal → konsole → xfce4-terminal → xterm → terminator → x-terminal-emulator
