@@ -102,30 +102,22 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
                 }
             )
 
-        # Detect if the launcher process is known to exit quickly (e.g., wt.exe)
-        short_lived_launcher = False
-        try:
-            argv0 = "" if terminal_process.args is None else str(terminal_process.args[0]).lower()
-            if "wt.exe" in argv0:
-                short_lived_launcher = True
-        except Exception:
-            short_lived_launcher = False
-
-        # Wait for user response with cautious process monitoring
+        # Wait for user response with process monitoring
         timeout = 120  # 2 minutes max timeout
         start_time = time.time()
         check_interval = 0.5  # Check every 0.5 seconds
+        grace_period = 3  # Allow 3 seconds for process to stabilize
 
         while not output_file.exists() and time.time() - start_time < timeout:
-            # Only treat the process exiting as a failure when it's not a short-lived launcher
-            if not short_lived_launcher and terminal_process.poll() is not None:
-                # Process has ended, wait a bit for the file to be written
-                time.sleep(2)
-                if output_file.exists():
-                    break
+            # Check if the terminal process has ended after grace period
+            if time.time() - start_time > grace_period:
+                if terminal_process.poll() is not None:
+                    # Process has ended, wait a bit for the file to be written
+                    time.sleep(1)
+                    if output_file.exists():
+                        break
 
-                # Process truly ended without producing a response
-                if time.time() - start_time > 5:
+                    # Process ended without producing a response
                     return json.dumps(
                         {
                             "error": "Terminal closed without response",
@@ -177,7 +169,7 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
                 {
                     "status": "success",
                     "user_response": user_response,
-                    "message": f"User selected: {user_response}",
+                    "message": "User response captured successfully",
                 }
             )
 

@@ -125,32 +125,8 @@ def open_os_terminal(script_path: Path, title: str = "Follow-up Question") -> Op
 
     try:
         if system == "Windows":
-            # Try Windows Terminal first, then fall back to PowerShell, then cmd
-
-            # Try Windows Terminal
+            # Prefer launching PowerShell directly so we have a stable process handle
             try:
-                # Don't use pause - NoExit keeps window open
-                ps_command = f"& '{python_exe}' '{script_path}'"
-                proc = subprocess.Popen(
-                    [
-                        "wt.exe",
-                        "new-tab",
-                        "--title",
-                        title,
-                        "powershell.exe",
-                        "-NoExit",
-                        "-Command",
-                        ps_command,
-                    ],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE,
-                )
-                return proc
-            except (FileNotFoundError, OSError):
-                pass
-
-            # Try PowerShell
-            try:
-                # Don't use pause - NoExit keeps window open
                 ps_command = f"& '{python_exe}' '{script_path}'"
                 proc = subprocess.Popen(
                     [

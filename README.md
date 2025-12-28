@@ -98,7 +98,7 @@ I've created a basic web scraper. What would you like to do next?
 - **↑/↓ Arrow Keys** - Navigate through options
 - **Enter** - Select the highlighted option (or submit custom message if in text box)
 - **F2** - Copy the selected option to the text box for editing
-- **Tab** - Switch between option list and custom text box (pre-fills with selected option)
+- **Tab** - Switch between option list and custom text box
 - **Ctrl+C** - Cancel the prompt
 
 ### Tool Description

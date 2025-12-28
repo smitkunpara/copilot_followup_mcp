@@ -11,8 +11,9 @@ from prompt_toolkit.formatted_text import HTML, FormattedText
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import FormattedTextControl, HSplit, Layout, VSplit, Window
 from prompt_toolkit.layout.containers import ConditionalContainer, Container
+from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.styles import Style
-from prompt_toolkit.widgets import TextArea
+from prompt_toolkit.widgets import TextArea, Frame
 
 
 class InteractiveFollowUpCLI:
@@ -32,8 +33,11 @@ class InteractiveFollowUpCLI:
         self.focus_on_textbox = False
         self.result: Optional[str] = None
         self.text_area = TextArea(
-            prompt="",
-            multiline=False,
+            prompt="> ",
+            multiline=True,
+            wrap_lines=True,
+            height=5,
+            scrollbar=True,
             focusable=True,
         )
 
@@ -97,31 +101,20 @@ class InteractiveFollowUpCLI:
         # Display question
         content.append(("class:question", f"\n{self.question}\n\n"))
 
-        # Display options
+        # Display options with rounded appearance
         if self.options:
             for idx, option in enumerate(self.options):
                 is_selected = idx == self.selected_index and not self.focus_on_textbox
-                prefix = "> " if is_selected else "  "
-                style = "class:selected" if is_selected else "class:option"
-                content.append((style, f"{prefix}- {option}\n"))
+                if is_selected:
+                    # Selected option with arrow and color
+                    content.append(("class:option", "  "))
+                    content.append(("class:arrow", "➤ "))
+                    content.append(("class:selected", f"{option}\n"))
+                else:
+                    # Normal option
+                    content.append(("class:option", f"    {option}\n"))
 
         content.append(("", "\n"))
-
-        # Display custom input box
-        box_width = min(terminal_width - 4, 80)
-        is_textbox_selected = self.focus_on_textbox
-
-        box_lines = self._create_box(
-            "> Type your custom message"
-            if not self.text_area.text
-            else f"> {self.text_area.text}",
-            box_width,
-            selected=is_textbox_selected,
-        )
-
-        for line in box_lines:
-            style = "class:textbox-selected" if is_textbox_selected else "class:textbox"
-            content.append((style, line + "\n"))
 
         # Display hints
         content.append(("", "\n"))
@@ -131,7 +124,7 @@ class InteractiveFollowUpCLI:
             ("class:hint", "  Enter       : Select option or submit custom message\n")
         )
         content.append(
-            ("class:hint", "  Tab         : Switch to text input (pre-fill selected)\n")
+            ("class:hint", "  Tab         : Switch to text input\n")
         )
         content.append(
             ("class:hint", "  F2          : Edit selected option\n")
@@ -152,15 +145,17 @@ class InteractiveFollowUpCLI:
             wrap_lines=True,
         )
 
-        # Hidden text input for actual text entry
-        text_container = ConditionalContainer(
-            self.text_area, filter=Condition(lambda: self.focus_on_textbox)
+        # Always render the text input inside a frame so the box stays visible and full-width
+        text_frame = Frame(
+            body=self.text_area,
+            style="class:textbox-frame",
+            height=Dimension(preferred=5, max=5),
         )
 
         root_container = HSplit(
             [
                 content_window,
-                text_container,
+                text_frame,
             ]
         )
 
@@ -184,15 +179,11 @@ class InteractiveFollowUpCLI:
 
         @kb.add("tab")
         def _tab(event):
-            """Switch to text input and pre-fill with selected option."""
+            """Switch focus between options and text input."""
             if not self.focus_on_textbox:
-                if self.options and 0 <= self.selected_index < len(self.options):
-                    # Pre-fill with selected option
-                    self.text_area.text = self.options[self.selected_index]
                 self.focus_on_textbox = True
                 event.app.layout.focus(self.text_area)
             else:
-                # If already in text mode, switch back to options
                 self.focus_on_textbox = False
                 event.app.layout.focus_previous()
 
@@ -234,15 +225,16 @@ class InteractiveFollowUpCLI:
         app = Application(
             layout=self._create_layout(),
             key_bindings=self._create_key_bindings(),
-            full_screen=False,
+            full_screen=True,
             mouse_support=False,
             style=Style.from_dict({
-                "question": "bold #00aaff",
-                "option": "#ffffff",
-                "selected": "bold #00ff00",
-                "textbox": "#888888",
-                "textbox-selected": "bold #00ff00",
-                "hint": "#888888 italic",
+                "question": "bold #00d7ff",
+                "option": "#c0c0c0",
+                "selected": "bold #00ff87",
+                "arrow": "#00ff87",
+                "textbox-frame": "#5fd7ff",
+                "placeholder": "#808080 italic",
+                "hint": "#808080 italic",
             }),
         )
 
