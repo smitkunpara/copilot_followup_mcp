@@ -37,9 +37,9 @@ class InteractiveFollowUpCLI:
             prompt="> ",
             multiline=True,
             wrap_lines=True,
-            scrollbar=False,
+            scrollbar=True,  # Enable scrollbar for overflow
             focusable=True,
-            height=Dimension(min=1, preferred=1, max=5),
+            height=Dimension(min=1, max=5),  # Remove preferred, let content decide
         )
         # If user types directly, stop highlighting options
         self.text_area.buffer.on_text_insert += self._handle_text_insert
@@ -48,6 +48,14 @@ class InteractiveFollowUpCLI:
         """When user types, remove option highlighting and focus text box."""
         self.highlight_options = False
         self.focus_on_textbox = True
+
+    def _get_text_area_height(self) -> int:
+        """Calculate dynamic height based on content (1-5 lines)."""
+        text = self.text_area.text
+        if not text:
+            return 1
+        line_count = text.count('\n') + 1
+        return min(max(1, line_count), 5)
 
     def _get_terminal_width(self) -> int:
         """Get the current terminal width."""
@@ -157,6 +165,7 @@ class InteractiveFollowUpCLI:
         text_frame = Frame(
             body=self.text_area,
             style="class:textbox-frame",
+            height=Dimension(min=1, preferred=1, max=5),
         )
 
         root_container = HSplit(
@@ -174,14 +183,20 @@ class InteractiveFollowUpCLI:
 
         @kb.add("up")
         def _up(event):
-            """Move selection up."""
-            if not self.focus_on_textbox and self.options:
+            """Move selection up or navigate text."""
+            if self.focus_on_textbox or self.text_area.text:
+                # Let default behavior handle cursor movement in text
+                event.app.current_buffer.cursor_up()
+            elif self.options and self.highlight_options:
                 self.selected_index = (self.selected_index - 1) % len(self.options)
 
         @kb.add("down")
         def _down(event):
-            """Move selection down."""
-            if not self.focus_on_textbox and self.options:
+            """Move selection down or navigate text."""
+            if self.focus_on_textbox or self.text_area.text:
+                # Let default behavior handle cursor movement in text
+                event.app.current_buffer.cursor_down()
+            elif self.options and self.highlight_options:
                 self.selected_index = (self.selected_index + 1) % len(self.options)
 
         @kb.add("tab")
@@ -238,13 +253,14 @@ class InteractiveFollowUpCLI:
             full_screen=False,
             mouse_support=False,
             style=Style.from_dict({
-                "question": "bold #00d7ff",
-                "option": "#c0c0c0",
-                "selected": "bold #00ff87",
-                "arrow": "#00ff87",
-                "textbox-frame": "#5fd7ff",
-                "placeholder": "#808080 italic",
-                "hint": "#808080 italic",
+                "question": "bold #61afef",           # Softer blue
+                "option": "#abb2bf",                   # Light gray
+                "selected": "bold #98c379",            # Green
+                "arrow": "bold #e5c07b",               # Gold arrow
+                "textbox-frame": "#61afef",            # Match question
+                "hint": "#5c6370 italic",              # Muted gray
+                "scrollbar.background": "#3e4451",
+                "scrollbar.button": "#61afef",
             }),
         )
 

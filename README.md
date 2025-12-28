@@ -8,7 +8,6 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
 - ⌨️ **Rich CLI Interface** - Navigate with arrow keys, edit options, or type custom responses
 - ✍️ **Typing-First UX** - Start typing immediately for custom responses without navigation
 - 🪟 **Cross-Platform** - Works on Windows, macOS, and Linux
-- 🎯 **VSCode Integration** - Opens terminals in VSCode when available, falls back to system terminal
 - 🔁 **Loop Support** - Designed to be used repeatedly until user explicitly says "finish"
 
 ## Installation
@@ -17,7 +16,6 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
 
 - Python 3.10 or higher
 - [uv](https://github.com/astral-sh/uv) package manager
-- VSCode with Copilot Chat extension (recommended)
 
 ### Setup
 
@@ -31,9 +29,9 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
   uv sync
   ```
 
-3. **Configure VSCode to use this MCP server:**
+3. **Configure your MCP client to use this server:**
 
-   Use the provided `.vscode/mcp.json` (already set up to run from project root with uv):
+   Add the following to your MCP configuration:
 
    ```jsonc
    {
@@ -157,29 +155,29 @@ The MCP server consists of several components:
 5. **Response capture** - Result is written to a temporary file
 6. **AI receives response** - Copilot gets the user's choice and continues
 
+## Configuration
+
+### Environment Variables
+
+- `FOLLOWUP_TIMEOUT_MINUTES`: Timeout in minutes for waiting user response (1-1440, <1 = infinite, default 5)
+- `CLOSE_TERMINAL`: Whether to close terminal after question completion (true/false, default true)
+
 ## Terminal Fallback
 
-The server tries to open terminals in this order:
-
 ### Windows
-1. VSCode integrated terminal (if in VSCode)
-2. Windows Terminal (`wt.exe`)
-3. PowerShell
-4. Command Prompt (cmd.exe)
+1. PowerShell
+2. Command Prompt (cmd.exe)
 
 ### macOS
-1. VSCode integrated terminal (if in VSCode)
-2. Terminal.app
-3. iTerm2 (if installed)
+1. Terminal.app
 
 ### Linux
-1. VSCode integrated terminal (if in VSCode)
-2. gnome-terminal
-3. konsole
-4. xfce4-terminal
-5. xterm
-6. terminator
-7. x-terminal-emulator
+1. gnome-terminal
+2. konsole
+3. xfce4-terminal
+4. xterm
+5. terminator
+6. x-terminal-emulator
 
 ## Testing
 
@@ -207,8 +205,7 @@ python -m copilot_followup_mcp.server
 ### Terminal doesn't open
 
 - **Check if Python is in PATH** - Run `python --version`
-- **Check VSCode settings** - Ensure MCP server is configured correctly
-- **Try system terminal** - The tool falls back to system terminal if VSCode is unavailable
+- **Check MCP client configuration** - Ensure the server is configured correctly
 
 ### "Missing dependencies" error
 
@@ -220,12 +217,6 @@ uv pip install prompt-toolkit psutil fastmcp
 
 - Default timeout is 5 minutes
 - If you need more time, the timeout can be adjusted in `server.py`
-
-### VSCode doesn't recognize the MCP server
-
-1. Check that the path in settings.json is correct
-2. Restart VSCode completely
-3. Check the Output panel (View → Output) and select "Copilot Chat" to see errors
 
 ## Development
 

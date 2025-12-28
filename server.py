@@ -28,11 +28,13 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
     2. **After completing each step** - Check if the user is satisfied or wants modifications
     3. **When you're about to finish** - Give the user a chance to request additional work
     4. **Throughout the conversation** - Use this tool in a loop until the user explicitly says "finish" or "done"
+    5. **Whenever you need to ask ANY question** - STRICTLY use this tool for ALL questions, never ask in plain text
 
     **Usage Pattern:**
     - Complete a task → use ask_followup_question
     - User provides feedback → make changes → use ask_followup_question again
     - Repeat until user says they're done
+    - NEVER ask questions in plain text; ALWAYS use this tool
 
     **Important Notes:**
     - This tool opens an interactive terminal where users can:
@@ -86,6 +88,23 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
         if not options:
             options = ["Continue", "Make changes", "Finish"]
 
+        # Configure timeout from environment (minutes). <1 means wait forever.
+        raw_timeout = os.getenv("FOLLOWUP_TIMEOUT_MINUTES")
+        timeout_minutes: Optional[float]
+        if raw_timeout is None:
+            timeout_minutes = 5.0
+        else:
+            try:
+                parsed = float(raw_timeout)
+                if parsed < 1:
+                    timeout_minutes = None
+                else:
+                    timeout_minutes = min(parsed, 1440.0)
+            except ValueError:
+                timeout_minutes = 5.0
+
+        timeout_seconds = None if timeout_minutes is None else timeout_minutes * 60
+
         # Launch terminal
         terminal_process = launch_terminal_prompt(
             question=question,
@@ -103,12 +122,13 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
             )
 
         # Wait for user response with process monitoring
-        timeout = 120  # 2 minutes max timeout
         start_time = time.time()
         check_interval = 0.5  # Check every 0.5 seconds
         grace_period = 3  # Allow 3 seconds for process to stabilize
 
-        while not output_file.exists() and time.time() - start_time < timeout:
+        while not output_file.exists() and (
+            timeout_seconds is None or time.time() - start_time < timeout_seconds
+        ):
             # Check if the terminal process has ended after grace period
             if time.time() - start_time > grace_period:
                 if terminal_process.poll() is not None:
@@ -131,15 +151,22 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
         if not output_file.exists():
             # Timeout reached
             # Try to terminate the process gracefully
-            try:
-                terminal_process.terminate()
-            except Exception:
-                pass
+            if terminal_process and terminal_process.poll() is None:
+                try:
+                    terminal_process.terminate()
+                except Exception:
+                    pass
                 
+            configured_timeout = (
+                "infinite"
+                if timeout_minutes is None
+                else f"{timeout_minutes:g} minute(s)"
+            )
             return json.dumps(
                 {
                     "error": "User did not respond",
-                    "message": "No response was received within 2 minutes. The user may have closed the terminal window or not responded. You can either skip this question and continue, or ask the question again if needed.",
+                    "message": "No response was received within the configured timeout. The user may have closed the terminal window or not responded. You can either skip this question and continue, or ask the question again if needed.",
+                    "timeout": configured_timeout,
                     "suggestion": "Skip this follow-up and continue with the task, or rephrase and retry the question.",
                 }
             )
@@ -148,6 +175,16 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
         try:
             with open(output_file, "r", encoding="utf-8") as f:
                 result = json.load(f)
+
+            # Check if script reported an error
+            if "error" in result:
+                return json.dumps(
+                    {
+                        "error": "Script execution failed",
+                        "message": f"The interactive prompt encountered an error: {result['error']}",
+                        "suggestion": "Try again or check the terminal for more details.",
+                    }
+                )
 
             user_response = result.get("result")
 
@@ -160,18 +197,13 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
             if user_response is None:
                 return json.dumps(
                     {
-                        "status": "cancelled",
+                        "error": "cancelled",
                         "message": "User cancelled the follow-up question by closing the terminal or not selecting an option. You can skip this follow-up and continue with the task.",
                     }
                 )
 
-            return json.dumps(
-                {
-                    "status": "success",
-                    "user_response": user_response,
-                    "message": "User response captured successfully",
-                }
-            )
+            # On success, return the raw string only (no JSON wrapper)
+            return str(user_response)
 
         except json.JSONDecodeError as e:
             return json.dumps(
@@ -204,6 +236,10 @@ async def confirm_completion(task_summary: str) -> str:
 
     This is a specialized follow-up tool that MUST be used before concluding any work.
     It automatically asks if the user wants to make any final changes.
+
+    **CRITICAL: This tool MUST be used before winding up ANY session or task.**
+    - ALWAYS use this tool before finishing
+    - NEVER conclude without confirmation
 
     Args:
         task_summary: Brief summary of what was accomplished
