@@ -6,6 +6,7 @@ An MCP (Model Context Protocol) server that enables interactive follow-up questi
 
 - 🔄 **Interactive Follow-up Questions** - AI can ask users questions with multiple choice options
 - ⌨️ **Rich CLI Interface** - Navigate with arrow keys, edit options, or type custom responses
+- ✍️ **Typing-First UX** - Start typing immediately for custom responses without navigation
 - 🪟 **Cross-Platform** - Works on Windows, macOS, and Linux
 - 🎯 **VSCode Integration** - Opens terminals in VSCode when available, falls back to system terminal
 - 🔁 **Loop Support** - Designed to be used repeatedly until user explicitly says "finish"
@@ -87,19 +88,21 @@ I've created a basic web scraper. What would you like to do next?
 ╰───────────────────────────────────────╯
 
 💡 Hints:
-  ↑/↓    : Navigate options
-  Enter  : Select option or submit custom message
-  Tab    : Switch between options and text box
-  Ctrl+C : Cancel
+  ↑/↓         : Navigate options
+  Enter       : Select option or submit custom message
+  Tab         : Toggle between options and text input
+  F2          : Edit selected option
+  Ctrl+C      : Cancel
 ```
 
 ### Interactive Controls
 
-- **↑/↓ Arrow Keys** - Navigate through options
-- **Enter** - Select the highlighted option (or submit custom message if in text box)
-- **F2** - Copy the selected option to the text box for editing
-- **Tab** - Switch between option list and custom text box
+- **↑/↓ Arrow Keys** - Navigate through options (when options are highlighted)
+- **Enter** - Select the highlighted option or submit custom message
+- **Tab** - Toggle focus between options and text input
+- **F2** - Edit selected option (copies it to text box for modification)
 - **Ctrl+C** - Cancel the prompt
+- **Typing directly** - Start typing immediately to enter custom response (disables option highlighting)
 
 ### Tool Description
 

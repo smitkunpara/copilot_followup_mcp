@@ -31,15 +31,23 @@ class InteractiveFollowUpCLI:
         self.options = options if options else []
         self.selected_index = 0
         self.focus_on_textbox = False
+        self.highlight_options = True  # Start highlighted; disable once user types
         self.result: Optional[str] = None
         self.text_area = TextArea(
             prompt="> ",
             multiline=True,
             wrap_lines=True,
-            height=5,
-            scrollbar=True,
+            scrollbar=False,
             focusable=True,
+            height=Dimension(min=1, preferred=1, max=5),
         )
+        # If user types directly, stop highlighting options
+        self.text_area.buffer.on_text_insert += self._handle_text_insert
+
+    def _handle_text_insert(self, _event=None) -> None:
+        """When user types, remove option highlighting and focus text box."""
+        self.highlight_options = False
+        self.focus_on_textbox = True
 
     def _get_terminal_width(self) -> int:
         """Get the current terminal width."""
@@ -104,7 +112,7 @@ class InteractiveFollowUpCLI:
         # Display options with rounded appearance
         if self.options:
             for idx, option in enumerate(self.options):
-                is_selected = idx == self.selected_index and not self.focus_on_textbox
+                is_selected = idx == self.selected_index and self.highlight_options
                 if is_selected:
                     # Selected option with arrow and color
                     content.append(("class:option", "  "))
@@ -124,7 +132,7 @@ class InteractiveFollowUpCLI:
             ("class:hint", "  Enter       : Select option or submit custom message\n")
         )
         content.append(
-            ("class:hint", "  Tab         : Switch to text input\n")
+            ("class:hint", "  Tab         : Toggle between options and text input\n")
         )
         content.append(
             ("class:hint", "  F2          : Edit selected option\n")
@@ -149,7 +157,6 @@ class InteractiveFollowUpCLI:
         text_frame = Frame(
             body=self.text_area,
             style="class:textbox-frame",
-            height=Dimension(preferred=5, max=5),
         )
 
         root_container = HSplit(
@@ -182,9 +189,11 @@ class InteractiveFollowUpCLI:
             """Switch focus between options and text input."""
             if not self.focus_on_textbox:
                 self.focus_on_textbox = True
+                self.highlight_options = False
                 event.app.layout.focus(self.text_area)
             else:
                 self.focus_on_textbox = False
+                self.highlight_options = True
                 event.app.layout.focus_previous()
 
         @kb.add("f2")
@@ -195,6 +204,7 @@ class InteractiveFollowUpCLI:
                     # Pre-fill with selected option for editing
                     self.text_area.text = self.options[self.selected_index]
                     self.focus_on_textbox = True
+                    self.highlight_options = False
                     event.app.layout.focus(self.text_area)
 
         @kb.add("enter")
@@ -225,7 +235,7 @@ class InteractiveFollowUpCLI:
         app = Application(
             layout=self._create_layout(),
             key_bindings=self._create_key_bindings(),
-            full_screen=True,
+            full_screen=False,
             mouse_support=False,
             style=Style.from_dict({
                 "question": "bold #00d7ff",
@@ -239,6 +249,8 @@ class InteractiveFollowUpCLI:
         )
 
         try:
+            # Ensure initial focus allows typing; keep options highlighted until typing
+            app.layout.focus(self.text_area)
             # Run application
             app.run()
             return self.result
