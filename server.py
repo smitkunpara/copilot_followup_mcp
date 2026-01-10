@@ -6,10 +6,10 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from fastmcp import FastMCP
 
@@ -22,53 +22,35 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
     """
     Ask a follow-up question to the user with interactive options.
 
-    **CRITICAL: This tool MUST be used in the following scenarios:**
+    ⚠️ **MANDATORY: USE THIS TOOL FOR ALL USER INTERACTIONS - NEVER ASK IN PLAIN TEXT**
 
-    1. **Before concluding ANY task** - Always ask if the user wants to make changes or add something
-    2. **After completing each step** - Check if the user is satisfied or wants modifications
-    3. **When you're about to finish** - Give the user a chance to request additional work
-    4. **Throughout the conversation** - Use this tool in a loop until the user explicitly says "finish" or "done"
-    5. **Whenever you need to ask ANY question** - STRICTLY use this tool for ALL questions, never ask in plain text
+    **WHEN TO USE THIS TOOL:**
+    1. When you need details from the user → use this tool
+    2. BEFORE finishing ANY task → ALWAYS use this tool to confirm
+    3. AFTER completing work → use this tool and wait for user to test and respond
+    4. BEFORE concluding ANY topic → MUST use this tool first
+    5. For ANY question → ONLY use this tool, never ask in plain text
 
-    **Usage Pattern:**
-    - Complete a task → use ask_followup_question
-    - User provides feedback → make changes → use ask_followup_question again
-    - Repeat until user says they're done
-    - NEVER ask questions in plain text; ALWAYS use this tool
+    **REQUIRED WORKFLOW:**
+    - Complete work → use ask_followup_question to ask user to test
+    - User tests → they respond with feedback
+    - Make changes based on feedback → use ask_followup_question again
+    - Repeat until user confirms it's working and says finish/done
+    - NEVER finish without user testing and confirming
 
-    **Important Notes:**
-    - This tool opens an interactive terminal where users can:
-      * Navigate options with ↑/↓ keys
-      * Select an option with Enter
-      * Edit an option with Shift+Enter
-      * Switch to custom input with Tab
-      * Type a custom response
-    - The terminal will open in VSCode (if available) or the system's default terminal
-    - Do NOT conclude or finish ANY work without using this tool first
-    - Keep using this tool in a loop until the user explicitly requests to finish
+    **Example scenarios:**
+    - "I've made the changes. Please test and let me know if it's working:"
+      Options: ["It's working - finish", "Not working - needs fixes", "Need more changes"]
+    - "I need more information to proceed:"
+      Options: ["Option A", "Option B", "Provide custom details"]
 
     Args:
-        question: The follow-up question to ask the user (e.g., "What would you like to do next?",
-                 "Are you satisfied with these changes?", "Would you like me to add anything else?")
-        options: List of suggested options (e.g., ["Add more features", "Make changes", "Finish"])
-                Provide 3-5 clear, actionable options. Always include an option to finish/conclude.
+        question: Your question to the user
+        options: List of suggested responses (3-5 recommended)
+                Always include an option to finish when appropriate
 
     Returns:
-        str: The user's response - either a selected option or custom input
-
-    Example:
-        ```python
-        response = await ask_followup_question(
-            question="I've completed the initial implementation. What would you like to do next?",
-            options=[
-                "Add error handling",
-                "Improve performance",
-                "Add more tests",
-                "Make styling changes",
-                "Finish - this looks good"
-            ]
-        )
-        ```
+        str: User's response
     """
     try:
         # Import here to avoid issues if not installed
@@ -156,7 +138,7 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
                     terminal_process.terminate()
                 except Exception:
                     pass
-                
+
             configured_timeout = (
                 "infinite"
                 if timeout_minutes is None
@@ -227,37 +209,6 @@ async def ask_followup_question(question: str, options: list[str]) -> str:
                 "message": "An error occurred while processing the follow-up question",
             }
         )
-
-
-@mcp.tool()
-async def confirm_completion(task_summary: str) -> str:
-    """
-    Confirm task completion with the user before finishing.
-
-    This is a specialized follow-up tool that MUST be used before concluding any work.
-    It automatically asks if the user wants to make any final changes.
-
-    **CRITICAL: This tool MUST be used before winding up ANY session or task.**
-    - ALWAYS use this tool before finishing
-    - NEVER conclude without confirmation
-
-    Args:
-        task_summary: Brief summary of what was accomplished
-
-    Returns:
-        str: User's response indicating if they want changes or are satisfied
-    """
-    question = (
-        f"I've completed the following:\n\n{task_summary}\n\nWhat would you like to do?"
-    )
-    options = [
-        "This looks perfect - finish",
-        "Make some changes",
-        "Add more features",
-        "Start over with a different approach",
-    ]
-
-    return await ask_followup_question(question, options)
 
 
 def main():
