@@ -6,7 +6,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Annotated, Optional
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
@@ -18,39 +18,35 @@ mcp = FastMCP("copilot-followup")
 
 
 @mcp.tool()
-async def ask_followup_question(question: str, options: list[str]) -> str:
+async def ask_followup_question(
+    question: Annotated[
+        str,
+        "Your question to the user (e.g., 'What would you like to do next?', 'Is this working for you?')",
+    ],
+    options: Annotated[
+        list[str],
+        "Suggested options for user to select (3-5 recommended, always include finish/done option when appropriate)",
+    ],
+) -> str:
     """
     Ask a follow-up question to the user with interactive options.
 
     ⚠️ **MANDATORY: USE THIS TOOL FOR ALL USER INTERACTIONS - NEVER ASK IN PLAIN TEXT**
 
-    **WHEN TO USE THIS TOOL:**
-    1. When you need details from the user → use this tool
-    2. BEFORE finishing ANY task → ALWAYS use this tool to confirm
-    3. AFTER completing work → use this tool and wait for user to test and respond
-    4. BEFORE concluding ANY topic → MUST use this tool first
-    5. For ANY question → ONLY use this tool, never ask in plain text
+    **When to use:**
+    - Need details from user → use this tool
+    - BEFORE finishing ANY task → use this tool to confirm
+    - AFTER completing work → use this tool and wait for user to test
+    - BEFORE concluding ANY topic → MUST use this tool first
+    - For ANY question → ONLY use this tool, never ask in plain text
 
-    **REQUIRED WORKFLOW:**
-    - Complete work → use ask_followup_question to ask user to test
-    - User tests → they respond with feedback
-    - Make changes based on feedback → use ask_followup_question again
-    - Repeat until user confirms it's working and says finish/done
+    **Required workflow:**
+    - Complete work → use this tool → user tests/responds → make changes if needed → use this tool again
+    - Repeat until user confirms finish/done
     - NEVER finish without user testing and confirming
 
-    **Example scenarios:**
-    - "I've made the changes. Please test and let me know if it's working:"
-      Options: ["It's working - finish", "Not working - needs fixes", "Need more changes"]
-    - "I need more information to proceed:"
-      Options: ["Option A", "Option B", "Provide custom details"]
-
-    Args:
-        question: Your question to the user
-        options: List of suggested responses (3-5 recommended)
-                Always include an option to finish when appropriate
-
     Returns:
-        str: User's response
+        str: User's response (selected option or custom input)
     """
     try:
         # Import here to avoid issues if not installed
